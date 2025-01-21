@@ -49,7 +49,11 @@ export function ChatPageClient() {
       setChatSession((prev) => ({
         messages: [
           ...prev.messages,
-          { role: "assistant", content: data.response },
+          { 
+            role: "assistant", 
+            content: data.response,
+            citations: data.citations 
+          },
         ],
         isLoading: false,
       }));

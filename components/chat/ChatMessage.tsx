@@ -1,5 +1,6 @@
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -21,6 +22,28 @@ export function ChatMessage({ message }: ChatMessageProps) {
         </div>
         <div className="prose max-w-none">
           <p className="whitespace-pre-wrap">{message.content}</p>
+          {message.citations && message.citations.length > 0 && (
+            <div className="mt-4 border-t pt-2">
+              <p className="text-sm font-semibold text-gray-600">References:</p>
+              <ul className="mt-2 list-none space-y-2 pl-0">
+                {message.citations.map((citation, index) => (
+                  <li key={index} className="text-sm text-gray-600">
+                    [{index + 1}]{" "}
+                    {citation.blogId ? (
+                      <Link
+                        href={`/blog/${citation.blogId}`}
+                        className="text-blue-600 hover:underline"
+                      >
+                        {citation.title}
+                      </Link>
+                    ) : (
+                      citation.title
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
     </div>

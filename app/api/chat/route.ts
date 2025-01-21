@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { Db } from "mongodb";
 import clientPromise from "@/lib/mongodb";
 import { generateEmbedding } from "@/lib/embeddings";
+import { Citation } from "@/types/chat";
 
 const GENERATIVE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY;
 const LLM_MODEL_NAME = "gemini-1.5-flash-8b";
@@ -11,12 +12,14 @@ const genAI = new GoogleGenerativeAI(GENERATIVE_AI_API_KEY || "");
 const llmModel = genAI.getGenerativeModel({ model: LLM_MODEL_NAME });
 
 interface BlogResult {
+  _id: string;
   title: string;
   description: string;
   score: number;
 }
 
 interface FormattedBlogResult {
+  id: string;
   title: string;
   content: string;
 }
@@ -37,7 +40,7 @@ async function getBlogEmbeddings(db: Db, queryEmbedding: number[]): Promise<stri
       },
       {
         $project: {
-          _id: 0,
+          _id: 1,
           title: 1,
           description: 1,
           score: { $meta: "vectorSearchScore" }
@@ -54,9 +57,9 @@ async function getBlogEmbeddings(db: Db, queryEmbedding: number[]): Promise<stri
       contentPreviews: results.map((r: BlogResult) => `${r.title}: ${r.description.substring(0, 100)}...`)
     });
 
-    // Format blog content for prompt
     return results.map((doc: BlogResult) => `
 Title: ${doc.title}
+ID: ${doc._id}
 Description: ${doc.description}
 Full content: ${doc.description}`);
   } catch (error) {
@@ -88,7 +91,6 @@ export async function POST(req: Request) {
 
     console.log("Processing query:", message);
 
-    // 1. Generate embedding for the query
     const enhancedQuery = `
 Title: Find information about ${message}
 Keywords: ${message.toLowerCase().split(/\s+/).join(', ')}
@@ -101,7 +103,6 @@ Full content: Tell me about ${message}`;
     const queryEmbedding = await generateEmbedding(enhancedQuery);
     console.log("Generated query embedding with dimensions:", queryEmbedding.length);
 
-    // Check blogs collection status
     const allBlogs = await db.collection("blogs").find({}).toArray();
     console.log("Blogs collection status:", {
       totalBlogs: allBlogs.length,
@@ -109,7 +110,6 @@ Full content: Tell me about ${message}`;
       blogTitles: allBlogs.map(b => b.title)
     });
 
-    // Check if any documents have embeddings
     const sampleDoc = await db.collection("blogs").findOne(
       { embedding: { $exists: true } }
     );
@@ -122,17 +122,15 @@ Full content: Tell me about ${message}`;
       } : "No blogs found with embeddings"
     );
 
-    // 2. Query MongoDB for similar blog post embeddings
     const relevantBlogs = await getBlogEmbeddings(db, queryEmbedding);
     console.log(`Found ${relevantBlogs.length} relevant blog sections`);
 
-    // 3. Augment the prompt with retrieved content
-    console.log("Constructing prompt with relevant content");
-    // Extract titles and content for better context
     const relevantContent: FormattedBlogResult[] = relevantBlogs.map((content: string) => {
       const titleMatch = content.match(/Title: (.*?)(?:\n|$)/);
+      const idMatch = content.match(/ID: (.*?)(?:\n|$)/);
       const contentMatch = content.match(/Full content: (.*?)(?:\n|$)/);
       return {
+        id: idMatch ? idMatch[1] : '',
         title: titleMatch ? titleMatch[1] : '',
         content: contentMatch ? contentMatch[1] : content
       };
@@ -148,12 +146,28 @@ ${relevantContent.length > 0
   ? `I found relevant information in our Ayurvedic blog posts that can help answer this question about "${message}".
 
 Available sources:
-${relevantContent.map(item => `- ${item.title}`).join('\n')}
+${relevantContent.map((item, i) => `[${i + 1}] ${item.title}`).join('\n')}
 
 Detailed content:
 ${context}
 
-Based on these blog posts, please provide a clear and thorough answer. Explain Ayurvedic concepts in an accessible way and reference specific information from the blog posts.`
+Based on these blog posts, please provide a clear and thorough answer. When you reference specific information from a blog post, include the reference number in square brackets immediately after the information. Only cite sources that you actually use in your answer.
+
+Format your response in exactly this format:
+
+[Your detailed answer with in-text citations [1], [2], etc.]
+
+---
+[List of ONLY the sources you actually cited, formatted as:
+[1] Source Title
+[2] Source Title]
+
+Example:
+Ashwagandha has been shown to reduce stress levels [1] and improve sleep quality [2]. This herb is particularly effective for managing anxiety [1].
+
+---
+[1] The Benefits of Ashwagandha
+[2] Sleep and Ayurvedic Herbs`
   :
   `I've searched our blog posts but couldn't find specific information about "${message}". Please let the user know we don't currently have content covering this topic in our blog posts.`}
 
@@ -161,16 +175,44 @@ Question: ${message}
 
 Provide a detailed answer:`;
 
-    // 4. Generate content using the model
     const result = await llmModel.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
 
-    return NextResponse.json({ response: text });
+    // Parse the response to separate content and references
+    const [content, referencesSection] = text.split('\n---\n');
+    
+    // Parse used citations from the references section
+    const usedReferences = referencesSection
+      ? referencesSection.split('\n')
+          .filter(line => line.trim())
+          .map(line => {
+            const match = line.match(/\[(\d+)\]\s+(.+)/);
+            return match ? { index: parseInt(match[1]), title: match[2].trim() } : null;
+          })
+          .filter((ref): ref is { index: number, title: string } => ref !== null)
+      : [];
+
+    // Build citations array from used references
+    const citations = usedReferences.reduce<Citation[]>((acc, ref) => {
+      const source = relevantContent.find((item: FormattedBlogResult) => item.title === ref.title);
+      if (source) {
+        acc.push({
+          title: source.title,
+          content: source.content,
+          blogId: source.id
+        });
+      }
+      return acc;
+    }, []);
+
+    return NextResponse.json({
+      response: content.trim(),
+      citations: citations.length > 0 ? citations : undefined
+    });
   } catch (error) {
     console.error("Chat API error:", error);
     
-    // More descriptive error messages based on the error type
     let errorMessage = "Failed to generate response";
     if (error instanceof Error) {
       if (error.message.includes("embedContent")) {
