@@ -6,6 +6,7 @@ import { BlogDocument } from "@/types/blog"
 import { ObjectId } from 'mongodb'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
+import { generateEmbedding, prepareBlogForEmbedding } from "@/lib/embeddings"
 
 export async function POST(request: Request) {
   try {
@@ -61,7 +62,11 @@ export async function POST(request: Request) {
     const client = await clientPromise
     const db = client.db("tweb")
 
-    // Create blog post with explicit Date
+    // Generate embedding first
+    const content = await prepareBlogForEmbedding(title, description);
+    const embedding = await generateEmbedding(content);
+    
+    // Create blog post with explicit Date and embedding
     const createdAt = new Date()
     const blog: BlogDocument = {
       _id: new ObjectId(),
@@ -69,22 +74,41 @@ export async function POST(request: Request) {
       description,
       author,
       readTime,
+      embedding,
       ...(backgroundImage && { backgroundImage }),
       createdAt
     }
 
-    const result = await db
-      .collection<BlogDocument>("blogs")
-      .insertOne(blog)
+    // Start MongoDB session for transaction
+    const mongoSession = await client.startSession();
+    let createdBlog;
+    
+    try {
+      // Start transaction
+      await mongoSession.startTransaction();
 
-    // Return the created blog
-    const createdBlog = {
-      ...blog,
-      _id: result.insertedId.toString(),
-      createdAt: createdAt.toISOString()
+      // Insert the blog post with embedding
+      const result = await db
+        .collection<BlogDocument>("blogs")
+        .insertOne(blog, { session: mongoSession });
+
+      // Prepare response
+      createdBlog = {
+        ...blog,
+        _id: result.insertedId.toString(),
+        createdAt: createdAt.toISOString()
+      };
+
+      // Commit the transaction
+      await mongoSession.commitTransaction();
+      return NextResponse.json(createdBlog, { status: 201 });
+    } catch (error) {
+      // Abort transaction on error
+      await mongoSession.abortTransaction();
+      throw error;
+    } finally {
+      await mongoSession.endSession();
     }
-
-    return NextResponse.json(createdBlog, { status: 201 })
   } catch (error) {
     console.error("Error creating blog:", error)
     return NextResponse.json(
