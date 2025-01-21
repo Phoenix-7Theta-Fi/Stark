@@ -6,7 +6,7 @@ import { BlogDocument } from "@/types/blog"
 import { ObjectId } from 'mongodb'
 import { writeFile, mkdir } from 'fs/promises'
 import { join } from 'path'
-import { generateEmbedding, prepareBlogForEmbedding } from "@/lib/embeddings"
+import { generateEmbeddingsForChunks, prepareBlogForEmbedding } from "@/lib/embeddings"
 
 export async function POST(request: Request) {
   try {
@@ -62,10 +62,51 @@ export async function POST(request: Request) {
     const client = await clientPromise
     const db = client.db("tweb")
 
-    // Generate embedding first
-    const content = await prepareBlogForEmbedding(title, description);
-    const embedding = await generateEmbedding(content);
-    
+    // Check for Google AI API key first
+    if (!process.env.GOOGLE_AI_API_KEY) {
+      console.error("GOOGLE_AI_API_KEY not configured");
+      return NextResponse.json(
+        { error: "Server configuration error: Missing AI API key" },
+        { status: 500 }
+      )
+    }
+
+    // Generate single embedding from all content chunks
+    const contentChunks = await prepareBlogForEmbedding(title, description)
+      .catch(error => {
+        console.error("Error preparing blog content:", error);
+        throw new Error("Failed to prepare blog content for embedding");
+      });
+
+    if (!contentChunks || contentChunks.length === 0) {
+      console.error("No valid content chunks generated");
+      return NextResponse.json(
+        { error: "Failed to process blog content - no valid text found after sanitization" },
+        { status: 400 }
+      );
+    }
+
+    const embedding = await generateEmbeddingsForChunks(contentChunks)
+      .catch(error => {
+        console.error("Error generating embedding:", error);
+        throw new Error("Failed to generate blog embedding - blogs require embedding for RAG pipeline");
+      });
+
+    if (!embedding || embedding.length === 0) {
+      console.error("Invalid embedding generated");
+      return NextResponse.json(
+        { error: "Failed to generate valid embedding for blog content" },
+        { status: 500 }
+      );
+    }
+
+    // Log successful embedding generation
+    console.log("Successfully generated embedding:", {
+      chunks: contentChunks.length,
+      embeddingLength: embedding.length,
+      sampleEmbedding: embedding.slice(0, 5)
+    });
+
     // Create blog post with explicit Date and embedding
     const createdAt = new Date()
     const blog: BlogDocument = {

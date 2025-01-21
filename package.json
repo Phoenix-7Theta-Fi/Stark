@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "setup-vector-search": "node scripts/setup-vector-search.mjs",
-    "generate-embeddings": "node scripts/generate-blog-embeddings.mjs",
+    "generate-embeddings": "ts-node scripts/generate-blog-embeddings.ts",
     "migrate-blogs": "node scripts/migrate-blogs.mjs"
   },
   "dependencies": {

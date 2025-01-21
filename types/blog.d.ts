@@ -16,7 +16,7 @@ export interface BlogDocument {
     type: string  // MIME type
   }
   createdAt?: Date
-  embedding?: number[]  // Vector embedding for semantic search
+  embedding: number[]  // Vector embedding for semantic search
 }
 
 // For frontend/API responses
@@ -35,5 +35,8 @@ export interface Blog {
     type: string
   }
   createdAt?: string
-  embedding?: number[]  // Vector embedding for semantic search
+  embeddings: {
+    text: string,       // The chunk of text this embedding represents
+    vector: number[]    // Vector embedding for semantic search
+  }[]                  // Array of embeddings for different chunks
 }

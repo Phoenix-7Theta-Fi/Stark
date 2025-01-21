@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
-import { Db } from "mongodb";
+import { Db, ObjectId } from "mongodb";
 import clientPromise from "@/lib/mongodb";
 import { generateEmbedding } from "@/lib/embeddings";
 import { Citation } from "@/types/chat";
@@ -34,13 +34,18 @@ async function getBlogEmbeddings(db: Db, queryEmbedding: number[]): Promise<stri
           "index": "blogEmbeddingsV2",
           "path": "embedding",
           "queryVector": queryEmbedding,
-          "numCandidates": 100,
-          "limit": 5
+          "numCandidates": 200,
+          "limit": 10
         }
       },
       {
         $project: {
-          _id: 1,
+          _id: {
+            $convert: {
+              input: "$_id",
+              to: "string"
+            }
+          },
           title: 1,
           description: 1,
           score: { $meta: "vectorSearchScore" }
@@ -107,7 +112,13 @@ Full content: Tell me about ${message}`;
     console.log("Blogs collection status:", {
       totalBlogs: allBlogs.length,
       blogsWithEmbeddings: allBlogs.filter(b => b.embedding).length,
-      blogTitles: allBlogs.map(b => b.title)
+      blogsWithEmbeddingDetails: allBlogs.map(b => ({
+        title: b.title,
+        hasEmbedding: !!b.embedding,
+        embeddingLength: b.embedding?.length,
+        embeddingField: b.embedding ? 'present' : 'missing',
+        embeddingType: b.embedding ? typeof b.embedding : 'N/A'
+      }))
     });
 
     const sampleDoc = await db.collection("blogs").findOne(
@@ -129,10 +140,21 @@ Full content: Tell me about ${message}`;
       const titleMatch = content.match(/Title: (.*?)(?:\n|$)/);
       const idMatch = content.match(/ID: (.*?)(?:\n|$)/);
       const contentMatch = content.match(/Full content: (.*?)(?:\n|$)/);
-      return {
-        id: idMatch ? idMatch[1] : '',
+
+      // Clean up the ID by removing any whitespace
+      const id = idMatch ? idMatch[1].trim() : '';
+
+      // Log the extracted ID for debugging
+      console.log("Extracted blog ID:", { 
         title: titleMatch ? titleMatch[1] : '',
-        content: contentMatch ? contentMatch[1] : content
+        rawId: idMatch ? idMatch[1] : '',
+        cleanId: id
+      });
+
+      return {
+        id,
+        title: titleMatch ? titleMatch[1].trim() : '',
+        content: contentMatch ? contentMatch[1].trim() : content.trim()
       };
     });
 
@@ -145,66 +167,80 @@ Full content: Tell me about ${message}`;
 ${relevantContent.length > 0
   ? `I found relevant information in our Ayurvedic blog posts that can help answer this question about "${message}".
 
-Available sources:
+Available sources (ordered by relevance, most relevant first):
 ${relevantContent.map((item, i) => `[${i + 1}] ${item.title}`).join('\n')}
 
 Detailed content:
 ${context}
 
-Based on these blog posts, please provide a clear and thorough answer. When you reference specific information from a blog post, include the reference number in square brackets immediately after the information. Only cite sources that you actually use in your answer.
+Based on these blog posts, please provide a clear and thorough answer. When referencing information from a source, include its number in square brackets [1] immediately after the information. Focus on information from source [1] as it's most relevant.
 
-Format your response in exactly this format:
+Your response MUST have two parts separated by '---':
+1. Your answer with inline citations [1]
+2. A References section listing all cited sources
 
-[Your detailed answer with in-text citations [1], [2], etc.]
-
----
-[List of ONLY the sources you actually cited, formatted as:
-[1] Source Title
-[2] Source Title]
-
-Example:
-Ashwagandha has been shown to reduce stress levels [1] and improve sleep quality [2]. This herb is particularly effective for managing anxiety [1].
+Example format:
+[Your detailed answer with citations like this [1]]
 
 ---
-[1] The Benefits of Ashwagandha
-[2] Sleep and Ayurvedic Herbs`
+References:
+[1] Exact Blog Title As Listed Above
+`
   :
   `I've searched our blog posts but couldn't find specific information about "${message}". Please let the user know we don't currently have content covering this topic in our blog posts.`}
 
 Question: ${message}
 
-Provide a detailed answer:`;
+Provide a detailed answer:
+`;
 
     const result = await llmModel.generateContent(prompt);
     const response = await result.response;
     const text = response.text();
 
     // Parse the response to separate content and references
-    const [content, referencesSection] = text.split('\n---\n');
+    const parts = text.split('\n---\n');
+    const content = parts[0];
+    const referencesSection = parts[1]?.includes('References:') ? parts[1] : null;
     
-    // Parse used citations from the references section
-    const usedReferences = referencesSection
-      ? referencesSection.split('\n')
-          .filter(line => line.trim())
-          .map(line => {
-            const match = line.match(/\[(\d+)\]\s+(.+)/);
-            return match ? { index: parseInt(match[1]), title: match[2].trim() } : null;
-          })
-          .filter((ref): ref is { index: number, title: string } => ref !== null)
-      : [];
+    // Parse references from the content
+    const references = referencesSection
+      ?.split('\n')
+      .filter(line => line.trim())
+      .map(line => {
+        const match = line.match(/^\[(\d+)\]\s+(.+)$/);
+        return match ? { index: parseInt(match[1]), title: match[2].trim() } : null;
+      })
+      .filter((ref): ref is { index: number; title: string } => ref !== null) ?? [];
 
-    // Build citations array from used references
-    const citations = usedReferences.reduce<Citation[]>((acc, ref) => {
-      const source = relevantContent.find((item: FormattedBlogResult) => item.title === ref.title);
-      if (source) {
-        acc.push({
-          title: source.title,
-          content: source.content,
-          blogId: source.id
-        });
+    // Build citations array from references
+    const citations = references.reduce<Citation[]>((acc, ref) => {
+      // Find the matching blog content
+      const source = relevantContent.find(item =>
+        // Do a case-insensitive title comparison to ensure matches
+        item.title.toLowerCase() === ref.title.toLowerCase()
+      );
+      
+      if (source?.id) {
+        const cleanId = source.id.trim();
+        if (ObjectId.isValid(cleanId)) {
+          acc.push({
+            title: ref.title, // Use the exact title from the reference
+            content: source.content,
+            blogId: cleanId
+          });
+        }
       }
       return acc;
     }, []);
+
+    console.log("Built citations:", citations);
+
+    // Log citations for debugging
+    console.log("Generated citations:", citations.map(c => ({
+      title: c.title,
+      blogId: c.blogId
+    })));
 
     return NextResponse.json({
       response: content.trim(),

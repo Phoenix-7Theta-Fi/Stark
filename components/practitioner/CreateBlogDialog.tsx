@@ -105,7 +105,11 @@ export function CreateBlogDialog() {
 
       if (!response.ok) {
         const error = await response.json()
-        throw new Error(error.error || "Failed to create blog post")
+        throw new Error(
+          error.error === "Server configuration error: Missing AI API key"
+            ? "System is not configured properly. Please contact admin."
+            : error.error || "Failed to create blog post"
+        )
       }
 
       toast({
@@ -135,7 +139,8 @@ export function CreateBlogDialog() {
       <DialogTrigger asChild>
         <Button variant="outline">Create Blog Post</Button>
       </DialogTrigger>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-w-3xl" aria-describedby="blog-creation-form">
+        <div id="blog-creation-form" className="sr-only">Form to create a new blog post with title, image and content editor</div>
         <DialogHeader>
           <DialogTitle>Create a New Blog Post</DialogTitle>
         </DialogHeader>
