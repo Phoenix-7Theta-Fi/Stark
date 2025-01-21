@@ -90,6 +90,7 @@ export function CreateBlogDialog() {
       formData.append('author', JSON.stringify({
         name: session?.user?.name || "Anonymous",
         avatar: session?.user?.image || "/default-avatar.png",
+        practitionerId: session?.user?.id
       }))
       formData.append('readTime', calculateReadTime(content))
       

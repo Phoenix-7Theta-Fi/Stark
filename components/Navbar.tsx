@@ -22,6 +22,12 @@ export function Navbar() {
               >
                 Blog
               </Link>
+              <Link 
+                href="/chat" 
+                className="text-gray-600 hover:text-gray-800 transition-colors"
+              >
+                AI Chat
+              </Link>
               {session?.user.role === 'practitioner' ? (
                 <Link 
                   href="/practitioner"

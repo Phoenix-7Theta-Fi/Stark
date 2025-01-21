@@ -5,6 +5,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AppointmentForm } from "@/components/appointments/AppointmentForm";
+import { CreateBlogDialog } from "@/components/practitioner/CreateBlogDialog";
+import { useSession } from "next-auth/react";
 
 interface PractitionerPageClientProps {
   practitioner: {
@@ -20,6 +22,7 @@ interface PractitionerPageClientProps {
 export function PractitionerPageClient({ practitioner }: PractitionerPageClientProps) {
   const [isBookingOpen, setIsBookingOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { data: session } = useSession();
 
   if (!practitioner) {
     return (
@@ -32,6 +35,8 @@ export function PractitionerPageClient({ practitioner }: PractitionerPageClientP
       </Card>
     );
   }
+
+  const isPractitionerProfile = session?.user?.name === practitioner.name;
 
   return (
     <div className="space-y-6">
@@ -58,29 +63,36 @@ export function PractitionerPageClient({ practitioner }: PractitionerPageClientP
               <p>{practitioner.bio}</p>
             </div>
 
-            <Dialog open={isBookingOpen} onOpenChange={setIsBookingOpen}>
-              <DialogTrigger asChild>
-                <Button 
-                  className="w-full"
-                  disabled={isSubmitting}
-                >
-                  {isSubmitting ? "Processing..." : "Book Appointment"}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[600px]">
-                <DialogHeader>
-                  <DialogTitle>Book an Appointment with {practitioner.name}</DialogTitle>
-                </DialogHeader>
-                <AppointmentForm
-                  practitionerId={practitioner._id}
-                  practitionerName={practitioner.name}
-                  onSuccess={() => {
-                    setIsBookingOpen(false);
-                    setIsSubmitting(false);
-                  }}
-                />
-              </DialogContent>
-            </Dialog>
+            <div className="flex gap-4">
+              <Dialog open={isBookingOpen} onOpenChange={setIsBookingOpen}>
+                <DialogTrigger asChild>
+                  <Button 
+                    className="flex-1"
+                    disabled={isSubmitting}
+                  >
+                    {isSubmitting ? "Processing..." : "Book Appointment"}
+                  </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-[600px]">
+                  <DialogHeader>
+                    <DialogTitle>Book an Appointment with {practitioner.name}</DialogTitle>
+                  </DialogHeader>
+                  <AppointmentForm
+                    practitionerId={practitioner._id}
+                    practitionerName={practitioner.name}
+                    onSuccess={() => {
+                      setIsBookingOpen(false);
+                      setIsSubmitting(false);
+                    }}
+                  />
+                </DialogContent>
+              </Dialog>
+              {isPractitionerProfile && (
+                <div className="flex-1">
+                  <CreateBlogDialog />
+                </div>
+              )}
+            </div>
           </div>
         </CardContent>
       </Card>

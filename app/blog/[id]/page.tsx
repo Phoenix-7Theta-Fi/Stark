@@ -130,7 +130,7 @@ export default function BlogPost({ params }: { params: { id: string } }) {
 
         {/* Content */}
         <div className="prose prose-lg max-w-none">
-          <p className="text-lg leading-relaxed">{blog.description}</p>
+          <div dangerouslySetInnerHTML={{ __html: blog.description }} />
           {blog.createdAt && (
             <p className="text-sm text-gray-500">
               Published on: {new Date(blog.createdAt).toLocaleDateString()}

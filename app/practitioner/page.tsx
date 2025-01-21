@@ -1,12 +1,19 @@
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth/options";
+"use client"
+
+import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { PractitionerProfile } from "@/components/practitioner/PractitionerProfile";
+import { CreateBlogDialog } from "@/components/practitioner/CreateBlogDialog";
 
-export default async function PractitionerDashboard() {
-  const session = await getServerSession(authOptions);
+export default function PractitionerDashboard() {
+  const { data: session, status } = useSession();
+
+  if (status === "loading") {
+    return null;
+  }
 
   if (!session) {
     redirect("/");
@@ -28,16 +35,20 @@ export default async function PractitionerDashboard() {
           </Card>
         </Link>
 
-        <Link href="/blog">
-          <Card className="hover:bg-gray-50 transition-colors cursor-pointer">
-            <CardContent className="pt-6">
-              <h2 className="text-xl font-semibold mb-2">Blog Posts</h2>
-              <p className="text-gray-500">
-                Write and manage your health articles.
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
+        <Card className="hover:bg-gray-50 transition-colors">
+          <CardContent className="pt-6">
+            <h2 className="text-xl font-semibold mb-2">Blog Posts</h2>
+            <p className="text-gray-500 mb-4">
+              Write and manage your health articles.
+            </p>
+            <div className="flex gap-4">
+              <CreateBlogDialog />
+              <Link href="/blog">
+                <Button variant="secondary">View All Posts</Button>
+              </Link>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="hover:bg-gray-50 transition-colors">
           <CardContent className="pt-6">
