@@ -73,7 +73,7 @@ async function seedBlogs() {
   try {
     console.log('Connecting to MongoDB...')
     const client = await MongoClient.connect(process.env.MONGODB_URI!)
-    const db = client.db("test") // Use 'test' database
+    const db = client.db("tweb") // Use 'tweb' database
 
     // Get the practitioner's userId from the practitionerProfiles collection
     const practitionerId = "678a896cd4d945b0359b2ff2" // Harsha's userId

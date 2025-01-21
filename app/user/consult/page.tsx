@@ -17,9 +17,19 @@ async function getDoctors() {
                 'Content-Type': 'application/json',
             },
         })
-        if (!response.ok) throw new Error("Failed to fetch practitioners")
-        const data = await response.json()
-        return data.practitioners as PractitionerProfile[]
+        if (!response.ok) {
+            console.error("API response not OK:", response.status, response.statusText);
+            throw new Error("Failed to fetch practitioners");
+        }
+        const data = await response.json();
+        console.log("API response data:", data);
+        
+        if (!data.practitioners) {
+            console.error("No practitioners property in response:", data);
+            return [];
+        }
+        
+        return data.practitioners as PractitionerProfile[];
     } catch (error) {
         console.error("Error fetching practitioners:", error)
         return []

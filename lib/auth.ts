@@ -20,7 +20,7 @@ export async function registerUser(data: UserInput) {
   const { username, email, password, role } = validatedData
   
   const client = await clientPromise
-  const users = client.db("tangerine").collection("users")
+  const users = client.db("tweb").collection("users")
   
   const existingUser = await users.findOne({ email })
   

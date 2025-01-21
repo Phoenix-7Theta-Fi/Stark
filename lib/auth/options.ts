@@ -23,7 +23,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         const client = await clientPromise
-        const users = client.db("tangerine").collection("users")
+        const users = client.db("tweb").collection("users")
         
         const user = await users.findOne({ email: credentials.email })
         

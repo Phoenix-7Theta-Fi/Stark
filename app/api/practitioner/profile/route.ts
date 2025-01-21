@@ -27,7 +27,7 @@ export async function GET() {
     }
 
     const client = await clientPromise
-    const db = client.db()
+    const db = client.db("tweb")
     
     const profile = await db.collection("practitionerProfiles").findOne({
       userId: session.user.id,
@@ -89,7 +89,7 @@ export async function PUT(request: Request) {
     })
 
     const client = await clientPromise
-    const db = client.db()
+    const db = client.db("tweb")
 
     // Update profile
     const result = await db.collection("practitionerProfiles").updateOne(
