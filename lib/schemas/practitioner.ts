@@ -21,6 +21,7 @@ export const practitionerProfileSchema = z.object({
   fee: z.number().min(0),
   availability: z.record(z.string(), dayAvailabilitySchema),
   bio: z.string().optional(),
+  image: z.string().optional(), // URL of the uploaded image
   isVerified: z.boolean().default(false),
   updatedAt: z.date().optional(),
 })

@@ -34,7 +34,22 @@ export async function POST(request: Request) {
       )
     }
 
-    const author = JSON.parse(authorData)
+    const client = await clientPromise
+    const db = client.db("tweb")
+
+    // Get practitioner's current profile image ID before creating blog
+    const practitionerProfile = await db.collection("practitionerProfiles").findOne(
+      { userId: session.user.id },
+      { projection: { imageId: 1, _id: 0 } }
+    )
+
+    // Parse author data but override with current profile image if available
+    const author = {
+      ...JSON.parse(authorData),
+      avatar: practitionerProfile?.imageId 
+        ? `/api/practitioner/profile/image/${practitionerProfile.imageId}`
+        : JSON.parse(authorData).avatar // fallback to provided avatar
+    }
 
     // Handle image upload if present
     let backgroundImage: string | undefined
@@ -58,9 +73,6 @@ export async function POST(request: Request) {
       await writeFile(join(uploadDir, filename), buffer)
       backgroundImage = `/uploads/${filename}`
     }
-
-    const client = await clientPromise
-    const db = client.db("tweb")
 
     // Check for Google AI API key first
     if (!process.env.GOOGLE_AI_API_KEY) {

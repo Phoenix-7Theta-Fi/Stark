@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth"
 import { authOptions } from "@/lib/auth/options"
 import clientPromise from "@/lib/mongodb"
 import { practitionerProfileSchema } from "@/lib/schemas/practitioner"
+import { ObjectId } from "mongodb"
 
 const defaultTimeSlots = [
   { start: "09:00", end: "10:00", available: true },
@@ -51,12 +52,18 @@ export async function GET() {
         qualification: "",
         consultationType: "both",
         fee: 0,
+        image: "",
         availability: defaultAvailability,
         updatedAt: new Date(),
       }
 
       await db.collection("practitionerProfiles").insertOne(defaultProfile)
       return NextResponse.json(defaultProfile)
+    }
+
+    // If profile has an imageId, fetch the image URL
+    if (profile.imageId) {
+      profile.image = `/api/practitioner/profile/image/${profile.imageId}`
     }
 
     return NextResponse.json(profile)
@@ -91,12 +98,22 @@ export async function PUT(request: Request) {
     const client = await clientPromise
     const db = client.db("tweb")
 
+    // If there's a new image URL, extract the imageId
+    let imageId = null
+    if (validatedData.image) {
+      const match = validatedData.image.match(/\/image\/([a-f0-9]+)$/)
+      if (match) {
+        imageId = new ObjectId(match[1])
+      }
+    }
+
     // Update profile
     const result = await db.collection("practitionerProfiles").updateOne(
       { userId: session.user.id },
       {
         $set: {
           ...validatedData,
+          imageId, // Store the imageId reference
           updatedAt: new Date(),
         },
       },
@@ -112,7 +129,17 @@ export async function PUT(request: Request) {
       userId: session.user.id,
     })
 
-    return NextResponse.json(updatedProfile)
+    if (!updatedProfile) {
+      throw new Error("Failed to retrieve updated profile")
+    }
+
+    // Add the image URL to the response if there's an imageId
+    const profileResponse = { ...updatedProfile }
+    if (profileResponse.imageId) {
+      profileResponse.image = `/api/practitioner/profile/image/${profileResponse.imageId}`
+    }
+
+    return NextResponse.json(profileResponse)
   } catch (error) {
     console.error("Error updating profile:", error)
     if (error instanceof Error) {

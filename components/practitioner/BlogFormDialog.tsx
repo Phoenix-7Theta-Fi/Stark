@@ -60,6 +60,21 @@ export function BlogFormDialog({ blog, trigger, onSuccess }: BlogFormDialogProps
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
   const { data: session } = useSession()
+  const [practitionerProfile, setPractitionerProfile] = useState<any>(null)
+
+  // Fetch practitioner profile when dialog opens
+  useEffect(() => {
+    if (open && session?.user?.id && !blog) {
+      fetch('/api/practitioner/profile')
+        .then(res => res.json())
+        .then(data => {
+          setPractitionerProfile(data)
+        })
+        .catch(error => {
+          console.error("Error fetching practitioner profile:", error)
+        })
+    }
+  }, [open, session?.user?.id, blog])
 
   // Reset form when dialog opens/closes
   useEffect(() => {
@@ -112,11 +127,13 @@ export function BlogFormDialog({ blog, trigger, onSuccess }: BlogFormDialogProps
 
       if (!blog) {
         // Creating new blog
-        formData.append('author', JSON.stringify({
+        const authorData = {
           name: session?.user?.name || "Anonymous",
-          avatar: session?.user?.image || "/default-avatar.png",
+          // Use current profile image if available, fallback to session image
+          avatar: practitionerProfile?.image || session?.user?.image || "/default-avatar.png",
           practitionerId: session?.user?.id
-        }))
+        }
+        formData.append('author', JSON.stringify(authorData))
       }
 
       const response = await fetch(

@@ -1,52 +1,16 @@
 "use client"
 
 import { useCallback, useEffect, useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { TimeSlot, DayAvailability } from "@/lib/schemas/practitioner"
+import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
-
-interface ProfileData {
-  name: string
-  age: number
-  experience: number
-  qualification: string
-  consultationType: "online" | "in-person" | "both"
-  fee: number
-  availability: Record<string, DayAvailability>
-}
-
-const defaultTimeSlots: TimeSlot[] = [
-  { start: "09:00", end: "10:00", available: true },
-  { start: "10:00", end: "11:00", available: true },
-  { start: "11:00", end: "12:00", available: true },
-  { start: "14:00", end: "15:00", available: true },
-  { start: "15:00", end: "16:00", available: true },
-  { start: "16:00", end: "17:00", available: true },
-]
-
-const weekDays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-
-const defaultProfile: ProfileData = {
-  name: "",
-  age: 30,
-  experience: 0,
-  qualification: "",
-  consultationType: "both",
-  fee: 0,
-  availability: weekDays.reduce((acc, day) => ({
-    ...acc,
-    [day]: {
-      enabled: true,
-      timeSlots: defaultTimeSlots.map(slot => ({ ...slot })),
-    },
-  }), {}),
-}
+import { ProfileData, defaultProfile, weekDays } from "./types"
+import { ProfileHeader } from "./ProfileHeader"
+import { BasicInfo } from "./BasicInfo"
+import { QualificationInfo } from "./QualificationInfo"
+import { WeekDaySelector } from "./WeekDaySelector"
+import { TimeSlotGrid } from "./TimeSlotGrid"
+import { EditProfileForm } from "./edit-profile/EditProfileForm"
 
 export function PractitionerProfile() {
   const { toast } = useToast()
@@ -73,7 +37,7 @@ export function PractitionerProfile() {
           ...acc,
           [day]: {
             enabled: existingDay.enabled ?? true,
-            timeSlots: existingDay.timeSlots || defaultTimeSlots.map(slot => ({ ...slot })),
+            timeSlots: existingDay.timeSlots || defaultProfile.availability[day].timeSlots,
           },
         }
       }, {})
@@ -85,6 +49,7 @@ export function PractitionerProfile() {
         qualification: data.qualification || "",
         consultationType: data.consultationType || "both",
         fee: data.fee || 0,
+        image: data.image || "",
         availability,
       })
 
@@ -107,55 +72,12 @@ export function PractitionerProfile() {
     fetchProfile()
   }, [fetchProfile])
 
-  const handleEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    try {
-      const response = await fetch("/api/practitioner/profile", {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(profileData),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to update profile")
-      }
-
-      const updatedData = await response.json()
-      setProfileData({
-        name: updatedData.name,
-        age: updatedData.age,
-        experience: updatedData.experience,
-        qualification: updatedData.qualification,
-        consultationType: updatedData.consultationType,
-        fee: updatedData.fee,
-        availability: updatedData.availability,
-      })
-
-      setIsEditing(false)
-      toast({
-        title: "Success",
-        description: "Profile updated successfully",
-      })
-    } catch (error) {
-      console.error("Error updating profile:", error)
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to update profile",
-        variant: "destructive",
-      })
-    }
-  }
-
-   const toggleDayEnabled = async (day: string) => {
+  const handleToggleDay = async (day: string) => {
     const updatedAvailability = {
       ...profileData.availability,
       [day]: {
         ...profileData.availability[day],
         enabled: !profileData.availability[day].enabled,
-         timeSlots: profileData.availability[day].timeSlots.map(slot => ({ ...slot })),
       },
     }
 
@@ -177,11 +99,11 @@ export function PractitionerProfile() {
       }
 
       const data = await response.json()
-        setProfileData({
+      setProfileData({
         ...profileData,
-         availability: data.availability,
+        availability: data.availability,
       })
-       toast({
+      toast({
         title: "Success",
         description: `${day} availability updated`,
       })
@@ -195,17 +117,17 @@ export function PractitionerProfile() {
     }
   }
 
+  const handleToggleTimeSlot = async (index: number) => {
+    if (!selectedDay) return
 
-  const toggleTimeSlot = async (day: string, slotIndex: number) => {
-      const updatedTimeSlots = profileData.availability[day].timeSlots.map((slot, index) => 
-      index === slotIndex ? { ...slot, available: !slot.available } : { ...slot }
+    const updatedTimeSlots = profileData.availability[selectedDay].timeSlots.map((slot, i) => 
+      i === index ? { ...slot, available: !slot.available } : { ...slot }
     )
-
 
     const updatedAvailability = {
       ...profileData.availability,
-      [day]: {
-        ...profileData.availability[day],
+      [selectedDay]: {
+        ...profileData.availability[selectedDay],
         timeSlots: updatedTimeSlots,
       },
     }
@@ -235,7 +157,7 @@ export function PractitionerProfile() {
 
       toast({
         title: "Success",
-        description: `Time slot updated for ${day}`,
+        description: `Time slot updated for ${selectedDay}`,
       })
     } catch (error) {
       console.error("Error updating time slot:", error)
@@ -261,149 +183,29 @@ export function PractitionerProfile() {
 
   return (
     <Card className="w-full max-w-3xl mx-auto">
-      <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="text-2xl text-orange-600">Profile</CardTitle>
-        <div className="flex space-x-2">
-          <Dialog open={isEditing} onOpenChange={setIsEditing}>
-            <DialogTrigger asChild>
-              <Button variant="outline">Edit Profile</Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px]">
-              <DialogHeader>
-                <DialogTitle>Edit Profile</DialogTitle>
-              </DialogHeader>
-              <form onSubmit={handleEditSubmit} className="space-y-4">
-                <div className="grid gap-2">
-                  <Label htmlFor="name">Name</Label>
-                  <Input
-                    id="name"
-                    value={profileData.name}
-                    onChange={(e) =>
-                      setProfileData({ ...profileData, name: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="age">Age</Label>
-                  <Input
-                    id="age"
-                    type="number"
-                    value={profileData.age}
-                    onChange={(e) =>
-                      setProfileData({
-                        ...profileData,
-                        age: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="experience">Experience (years)</Label>
-                  <Input
-                    id="experience"
-                    type="number"
-                    value={profileData.experience}
-                    onChange={(e) =>
-                      setProfileData({
-                        ...profileData,
-                        experience: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="qualification">Qualification</Label>
-                  <Input
-                    id="qualification"
-                    value={profileData.qualification}
-                    onChange={(e) =>
-                      setProfileData({
-                        ...profileData,
-                        qualification: e.target.value,
-                      })
-                    }
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="consultationType">Consultation Type</Label>
-                  <Select
-                    value={profileData.consultationType}
-                    onValueChange={(value: "online" | "in-person" | "both") =>
-                      setProfileData({ ...profileData, consultationType: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="online">Online</SelectItem>
-                      <SelectItem value="in-person">In Person</SelectItem>
-                      <SelectItem value="both">Both</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="fee">Consultation Fee</Label>
-                  <Input
-                    id="fee"
-                    type="number"
-                    value={profileData.fee}
-                    onChange={(e) =>
-                      setProfileData({
-                        ...profileData,
-                        fee: parseInt(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-                <Button type="submit" className="w-full">
-                  Save Changes
-                </Button>
-              </form>
-            </DialogContent>
-          </Dialog>
-          <Button 
-            variant="outline" 
-            onClick={() => {
-              setEditingTimeSlots(!editingTimeSlots)
-              if (!editingTimeSlots && !selectedDay) {
-                setSelectedDay("Monday")
-              }
-            }}
-          >
-            {editingTimeSlots ? "Done Editing" : "Edit Availability"}
-          </Button>
-        </div>
-      </CardHeader>
+      <ProfileHeader
+        onEditProfile={() => setIsEditing(true)}
+        onEditAvailability={() => {
+          setEditingTimeSlots(!editingTimeSlots)
+          if (!editingTimeSlots && !selectedDay) {
+            setSelectedDay("Monday")
+          }
+        }}
+        editingTimeSlots={editingTimeSlots}
+      />
       <CardContent className="space-y-6">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <h3 className="font-semibold text-gray-600">Name</h3>
-            <p>{profileData.name || "Not set"}</p>
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-600">Age</h3>
-            <p>{profileData.age} years</p>
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-600">Experience</h3>
-            <p>{profileData.experience} years</p>
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-600">Qualification</h3>
-            <p>{profileData.qualification || "Not set"}</p>
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-600">Consultation Type</h3>
-            <p className="capitalize">{profileData.consultationType}</p>
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-600">Consultation Fee</h3>
-            <p>₹{profileData.fee}</p>
-          </div>
-        </div>
-
-       <div>
+        <BasicInfo
+          name={profileData.name}
+          age={profileData.age}
+          experience={profileData.experience}
+          image={profileData.image}
+        />
+        <QualificationInfo
+          qualification={profileData.qualification}
+          consultationType={profileData.consultationType}
+          fee={profileData.fee}
+        />
+        <div>
           <div className="flex justify-between items-center mb-2">
             <h3 className="font-semibold text-gray-600">Availability</h3>
             {editingTimeSlots && (
@@ -412,81 +214,37 @@ export function PractitionerProfile() {
               </p>
             )}
           </div>
-          <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-            <div className="flex w-max space-x-4 p-4">
-              {weekDays.map((day) => (
-                <Button
-                  key={day}
-                  variant={selectedDay === day ? "default" : "outline"}
-                    className={`min-w-[100px] ${!editingTimeSlots && !profileData.availability[day].enabled ? "opacity-50" : ""}`}
-                  onClick={() => {
-                    if (editingTimeSlots) {
-                      toggleDayEnabled(day)
-                    }
-                    setSelectedDay(day)
-                  }}
-                >
-                  {day}
-                  {editingTimeSlots && (
-                    <span 
-                      className={`ml-2 ${
-                        profileData.availability[day].enabled 
-                          ? 'text-green-500' 
-                          : 'text-red-500'
-                      }`}
-                    >
-                      •
-                    </span>
-                  )}
-                </Button>
-              ))}
-            </div>
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
+          <WeekDaySelector
+            days={weekDays}
+            selectedDay={selectedDay}
+            editingTimeSlots={editingTimeSlots}
+            availability={profileData.availability}
+            onDaySelect={setSelectedDay}
+            onToggleDay={handleToggleDay}
+          />
         </div>
 
         {selectedDay && (
-          <div>
-            <h3 className="font-semibold text-gray-600 mb-2">
-              Time Slots for {selectedDay}
-               {editingTimeSlots && (
-                <span className="ml-2 text-sm text-gray-500">
-                  (Click slots to toggle availability)
-                </span>
-              )}
-            </h3>
-            <div className="grid grid-cols-3 gap-4">
-              {profileData.availability[selectedDay].timeSlots.map((slot, index) => (
-                <Button
-                  key={`${selectedDay}-${slot.start}-${slot.end}`}
-                  variant={slot.available ? "outline" : "ghost"}
-                   className={`w-full ${
-                    editingTimeSlots 
-                      ? "cursor-pointer hover:bg-gray-100" 
-                      : slot.available 
-                        ? "" 
-                        : "opacity-50"
-                  }`}
-                   onClick={() => editingTimeSlots && toggleTimeSlot(selectedDay, index)}
-                   disabled={!editingTimeSlots && !slot.available}
-                >
-                  {slot.start} - {slot.end}
-                  {editingTimeSlots && (
-                    <span 
-                      className={`ml-2 ${
-                        slot.available 
-                          ? 'text-green-500' 
-                          : 'text-red-500'
-                      }`}
-                    >
-                      •
-                    </span>
-                  )}
-                </Button>
-              ))}
-            </div>
-          </div>
+          <TimeSlotGrid
+            day={selectedDay}
+            timeSlots={profileData.availability[selectedDay].timeSlots}
+            editingTimeSlots={editingTimeSlots}
+            onToggleTimeSlot={handleToggleTimeSlot}
+          />
         )}
+
+        <Dialog open={isEditing} onOpenChange={setIsEditing}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Profile</DialogTitle>
+            </DialogHeader>
+            <EditProfileForm
+              profileData={profileData}
+              setProfileData={setProfileData}
+              onClose={() => setIsEditing(false)}
+            />
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   )
