@@ -29,3 +29,9 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 export default clientPromise
+
+// Helper function to get database
+export async function getDatabase() {
+  const client = await clientPromise
+  return client.db("tweb") // Replace "tweb" with your actual database name
+}

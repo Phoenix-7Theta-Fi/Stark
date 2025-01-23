@@ -12,7 +12,7 @@ export default async function PractitionerPage({
 }) {
   const session = await getServerSession(authOptions);
 
-  if (!session) {
+  if (!session?.user) {
     redirect("/");
   }
 
@@ -28,18 +28,35 @@ export default async function PractitionerPage({
       notFound();
     }
 
+    const isAdmin = session.user.role === "admin";
+
     return (
       <main className="container mx-auto py-8">
-        <PractitionerPageClient 
-          practitioner={{
-            _id: practitioner.userId,
-            name: practitioner.name || "",
-            specialization: practitioner.consultationType || "",
-            qualifications: practitioner.qualification || "",
-            experience: practitioner.experience || "",
-            bio: practitioner.bio || "",
-          }} 
-        />
+        <div className="space-y-4">
+          {isAdmin && (
+            <div className="flex justify-between items-center">
+              <h1 className="text-2xl font-bold">Practitioner Profile</h1>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">
+                  Status: {practitioner.isVerified ? 'Verified' : 'Not Verified'}
+                </span>
+                <a href="/admin" className="text-blue-500 hover:text-blue-600">
+                  Back to Admin
+                </a>
+              </div>
+            </div>
+          )}
+          <PractitionerPageClient 
+            practitioner={{
+              _id: practitioner.userId,
+              name: practitioner.name || "",
+              specialization: practitioner.consultationType || "",
+              qualifications: practitioner.qualification || "",
+              experience: `${practitioner.experience} years` || "",
+              bio: practitioner.bio || "No bio available",
+            }} 
+          />
+        </div>
       </main>
     );
   } catch (error) {

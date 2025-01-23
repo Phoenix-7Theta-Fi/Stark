@@ -2,15 +2,17 @@
 
 import React from 'react'
 import { motion } from 'framer-motion'
-import { Eye } from 'lucide-react'
+import { Eye, BadgeCheck } from 'lucide-react'
 import { PractitionerProfile } from '@/lib/schemas/practitioner'
 import Link from 'next/link'
 
 interface DoctorProfileCardProps {
     practitioner: PractitionerProfile
+    showVerifyButton?: boolean
+    onVerify?: (practitionerId: string) => void
 }
 
-const DoctorProfileCard: React.FC<DoctorProfileCardProps> = ({ practitioner }) => {
+const DoctorProfileCard: React.FC<DoctorProfileCardProps> = ({ practitioner, showVerifyButton, onVerify }) => {
     return (
         <div className="p-4 sm:p-6 flex items-center justify-center min-h-[400px]">
             <motion.div
@@ -50,9 +52,14 @@ const DoctorProfileCard: React.FC<DoctorProfileCardProps> = ({ practitioner }) =
                     {/* Header */}
                     <div className='flex justify-between items-start w-full'>
                         <div className='space-y-1.5'>
-                            <h1 className='text-xl sm:text-2xl font-bold tracking-tight text-white'>
-                                {practitioner.name}
-                            </h1>
+                            <div className="flex items-center gap-2">
+                                <h1 className='text-xl sm:text-2xl font-bold tracking-tight text-white'>
+                                    {practitioner.name}
+                                </h1>
+                                {practitioner.isVerified && (
+                                    <BadgeCheck className="h-5 w-5 text-blue-500" />
+                                )}
+                            </div>
                             <div className='inline-flex items-center gap-2 px-2.5 py-1.5 bg-white/60 backdrop-blur-md border border-white/20 rounded-full'>
                                 <div className='relative flex items-center justify-center'>
                                     <div className='w-2 h-2 rounded-full bg-amber-400' />
@@ -91,28 +98,42 @@ const DoctorProfileCard: React.FC<DoctorProfileCardProps> = ({ practitioner }) =
 
                     {/* Actions */}
                     <div className="grid grid-cols-1 gap-3">
-                        <Link href={`/user/practitioners/${practitioner.userId}`}>
+                        {showVerifyButton && !practitioner.isVerified ? (
                             <motion.button
-                                className='relative bg-white hover:bg-gray-50 px-4 py-3 text-sm font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-amber-600 group overflow-hidden w-full'
+                                className='relative bg-blue-500 hover:bg-blue-600 px-4 py-3 text-sm font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-white group overflow-hidden w-full'
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
+                                onClick={() => onVerify?.(practitioner.userId)}
                             >
-                                <motion.div
-                                    className="flex items-center gap-2"
-                                    animate={{
-                                        x: [0, 2, 0],
-                                    }}
-                                    transition={{
-                                        duration: 0.5,
-                                        repeat: Infinity,
-                                        ease: "easeInOut"
-                                    }}
-                                >
-                                    View Profile
-                                    <Eye className='size-4' />
+                                <motion.div className="flex items-center gap-2">
+                                    Verify Practitioner
+                                    <BadgeCheck className='size-4' />
                                 </motion.div>
                             </motion.button>
-                        </Link>
+                        ) : (
+                            <Link href={`/user/practitioners/${practitioner.userId}`}>
+                                <motion.button
+                                    className='relative bg-white hover:bg-gray-50 px-4 py-3 text-sm font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-amber-600 group overflow-hidden w-full'
+                                    whileHover={{ scale: 1.02 }}
+                                    whileTap={{ scale: 0.98 }}
+                                >
+                                    <motion.div
+                                        className="flex items-center gap-2"
+                                        animate={{
+                                            x: [0, 2, 0],
+                                        }}
+                                        transition={{
+                                            duration: 0.5,
+                                            repeat: Infinity,
+                                            ease: "easeInOut"
+                                        }}
+                                    >
+                                        View Profile
+                                        <Eye className='size-4' />
+                                    </motion.div>
+                                </motion.button>
+                            </Link>
+                        )}
                     </div>
                 </div>
             </motion.div>

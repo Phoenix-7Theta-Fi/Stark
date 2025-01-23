@@ -20,6 +20,8 @@ export const practitionerProfileSchema = z.object({
   consultationType: z.enum(["online", "in-person", "both"]),
   fee: z.number().min(0),
   availability: z.record(z.string(), dayAvailabilitySchema),
+  bio: z.string().optional(),
+  isVerified: z.boolean().default(false),
   updatedAt: z.date().optional(),
 })
 

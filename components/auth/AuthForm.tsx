@@ -47,14 +47,23 @@ export function AuthForm() {
         }
         
         // After successful registration, log the user in
-        await signIn("credentials", {
+        const result = await signIn("credentials", {
           email,
           password,
           redirect: false,
         })
-        
-        router.refresh()
+
+        if (result?.error) {
+          throw new Error("Login failed after registration")
+        }
+
+        if (role === "practitioner") {
+          router.push("/practitioner")
+        } else {
+          router.push("/user")
+        }
       } else {
+        // Handle login
         const result = await signIn("credentials", {
           email,
           password,
@@ -65,7 +74,18 @@ export function AuthForm() {
           throw new Error("Invalid credentials")
         }
 
-        router.refresh()
+        // Get session to check role
+        const session = await fetch("/api/auth/session").then(res => res.json())
+        const userRole = session?.user?.role
+
+        // Redirect based on role
+        if (userRole === "admin") {
+          router.push("/admin")
+        } else if (userRole === "practitioner") {
+          router.push("/practitioner")
+        } else {
+          router.push("/user")
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong")

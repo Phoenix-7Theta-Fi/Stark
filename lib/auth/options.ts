@@ -22,6 +22,21 @@ export const authOptions: NextAuthOptions = {
           return null
         }
 
+        // Check for admin credentials
+        if (credentials.email === process.env.ADMIN_EMAIL) {
+          const isValidPassword = credentials.password === process.env.ADMIN_PASSWORD
+          if (isValidPassword) {
+            return {
+              id: "admin",
+              email: process.env.ADMIN_EMAIL,
+              name: "Administrator",
+              role: "admin"
+            }
+          }
+          return null
+        }
+
+        // Regular user authentication
         const client = await clientPromise
         const users = client.db("tweb").collection("users")
         
@@ -58,7 +73,7 @@ export const authOptions: NextAuthOptions = {
     async session({ session, token }) {
       if (session?.user) {
         session.user.id = token.id as string
-        session.user.role = token.role as "user" | "practitioner"
+        session.user.role = token.role as "user" | "practitioner" | "admin"
         session.user.email = token.email as string
       }
       return session
@@ -66,8 +81,11 @@ export const authOptions: NextAuthOptions = {
     async redirect({ url, baseUrl }) {
       if (url.startsWith("/")) {
         const token = await (await fetch(`${baseUrl}/api/auth/session`)).json()
-        const role = token?.user?.role as "user" | "practitioner" | undefined
+        const role = token?.user?.role as "user" | "practitioner" | "admin" | undefined
         
+        if (role === "admin") {
+          return `${baseUrl}/admin`
+        }
         if (role === "practitioner") {
           return `${baseUrl}/practitioner`
         }

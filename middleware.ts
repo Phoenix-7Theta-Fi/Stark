@@ -1,40 +1,35 @@
-import { withAuth } from "next-auth/middleware"
+import { getToken } from "next-auth/jwt"
 import { NextResponse } from "next/server"
+import type { NextRequest } from "next/server"
 
-export default withAuth(
-  function middleware(req) {
-    const token = req.nextauth.token
-    const path = req.nextUrl.pathname
+export async function middleware(request: NextRequest) {
+  const token = await getToken({ req: request })
 
-    // Ensure authenticated users can't access the login page
-    if (path === "/" && token) {
-      return NextResponse.redirect(
-        new URL(
-          token.role === "practitioner" ? "/practitioner" : "/user",
-          req.url
-        )
-      )
+  // Protect admin routes
+  if (request.nextUrl.pathname.startsWith("/admin")) {
+    if (!token || token.role !== "admin") {
+      return NextResponse.redirect(new URL("/", request.url))
     }
-
-    // Protect dashboard routes and ensure role-based access
-    if (path.startsWith("/user") && token?.role !== "user") {
-      return NextResponse.redirect(new URL("/", req.url))
-    }
-
-    if (path.startsWith("/practitioner") && token?.role !== "practitioner") {
-      return NextResponse.redirect(new URL("/", req.url))
-    }
-
-    return NextResponse.next()
-  },
-  {
-    callbacks: {
-      authorized: ({ token }) => !!token,
-    },
   }
-)
 
-// Specify which routes to protect
+  // Protect practitioner routes
+  if (request.nextUrl.pathname.startsWith("/practitioner")) {
+    if (!token || token.role !== "practitioner") {
+      return NextResponse.redirect(new URL("/", request.url))
+    }
+  }
+
+  // Protect user routes
+  if (request.nextUrl.pathname.startsWith("/user")) {
+    // Allow admin access to user routes
+    if (!token || (token.role !== "user" && token.role !== "admin")) {
+      return NextResponse.redirect(new URL("/", request.url))
+    }
+  }
+
+  return NextResponse.next()
+}
+
 export const config = {
-  matcher: ["/user/:path*", "/practitioner/:path*"],
+  matcher: ["/admin/:path*", "/practitioner/:path*", "/user/:path*"]
 }

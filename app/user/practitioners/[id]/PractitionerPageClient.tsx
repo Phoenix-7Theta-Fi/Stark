@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { AppointmentForm } from "@/components/appointments/AppointmentForm";
 import { BlogFormDialog } from "@/components/practitioner/BlogFormDialog";
 import { useSession } from "next-auth/react";
+import { BadgeCheck } from "lucide-react";
 
 interface PractitionerPageClientProps {
   practitioner: {
@@ -37,6 +38,7 @@ export function PractitionerPageClient({ practitioner }: PractitionerPageClientP
   }
 
   const isPractitionerProfile = session?.user?.name === practitioner.name;
+  const isAdmin = session?.user?.role === "admin";
 
   return (
     <div className="space-y-6">
@@ -44,7 +46,12 @@ export function PractitionerPageClient({ practitioner }: PractitionerPageClientP
         <CardContent className="pt-6">
           <div className="space-y-4">
             <div>
-              <h2 className="text-2xl font-bold">{practitioner.name}</h2>
+              <h2 className="text-2xl font-bold">
+                {practitioner.name}
+                {session?.user?.role !== "admin" && (
+                  <BadgeCheck className="inline-block ml-2 h-5 w-5 text-blue-500" />
+                )}
+              </h2>
               <p className="text-gray-500">{practitioner.specialization}</p>
             </div>
 
@@ -60,39 +67,41 @@ export function PractitionerPageClient({ practitioner }: PractitionerPageClientP
 
             <div>
               <h3 className="font-semibold">About</h3>
-              <p>{practitioner.bio}</p>
+              <p className="text-gray-600">{practitioner.bio}</p>
             </div>
 
-            <div className="flex gap-4">
-              <Dialog open={isBookingOpen} onOpenChange={setIsBookingOpen}>
-                <DialogTrigger asChild>
-                  <Button 
-                    className="flex-1"
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting ? "Processing..." : "Book Appointment"}
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="sm:max-w-[600px]">
-                  <DialogHeader>
-                    <DialogTitle>Book an Appointment with {practitioner.name}</DialogTitle>
-                  </DialogHeader>
-                  <AppointmentForm
-                    practitionerId={practitioner._id}
-                    practitionerName={practitioner.name}
-                    onSuccess={() => {
-                      setIsBookingOpen(false);
-                      setIsSubmitting(false);
-                    }}
-                  />
-                </DialogContent>
-              </Dialog>
-              {isPractitionerProfile && (
-                <div className="flex-1">
-                  <BlogFormDialog />
-                </div>
-              )}
-            </div>
+            {!isAdmin && (
+              <div className="flex gap-4">
+                <Dialog open={isBookingOpen} onOpenChange={setIsBookingOpen}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      className="flex-1"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting ? "Processing..." : "Book Appointment"}
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[600px]">
+                    <DialogHeader>
+                      <DialogTitle>Book an Appointment with {practitioner.name}</DialogTitle>
+                    </DialogHeader>
+                    <AppointmentForm
+                      practitionerId={practitioner._id}
+                      practitionerName={practitioner.name}
+                      onSuccess={() => {
+                        setIsBookingOpen(false);
+                        setIsSubmitting(false);
+                      }}
+                    />
+                  </DialogContent>
+                </Dialog>
+                {isPractitionerProfile && (
+                  <div className="flex-1">
+                    <BlogFormDialog />
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
