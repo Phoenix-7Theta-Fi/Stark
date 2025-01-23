@@ -43,8 +43,8 @@ export default function PractitionerDashboard() {
             </p>
             <div className="flex gap-4">
               <BlogFormDialog />
-              <Link href="/blog">
-                <Button variant="secondary">View All Posts</Button>
+              <Link href="/practitioner/blogs">
+                <Button variant="secondary">Manage Posts</Button>
               </Link>
             </div>
           </CardContent>

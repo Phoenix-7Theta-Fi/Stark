@@ -226,8 +226,8 @@ export async function DELETE(
   try {
     const session = await getServerSession(authOptions)
 
-    // Check if user is authenticated and is a practitioner
-    if (!session || session.user.role !== "practitioner") {
+    // Check if user is authenticated and is either admin or the blog author
+    if (!session || (session.user.role !== "admin" && session.user.role !== "practitioner")) {
       return NextResponse.json(
         { error: "Unauthorized" },
         { status: 401 }
@@ -243,7 +243,7 @@ export async function DELETE(
     try {
       await mongoSession.startTransaction();
 
-      // Get the blog to check ownership
+      // Get the blog
       const blog = await db
         .collection<BlogDocument>("blogs")
         .findOne(
@@ -255,8 +255,8 @@ export async function DELETE(
         throw new Error("Blog not found");
       }
 
-      // Check if the current user is the author of the blog
-      if (blog.author.practitionerId !== session.user.id) {
+      // If not admin, check if the current user is the author of the blog
+      if (session.user.role !== "admin" && blog.author.practitionerId !== session.user.id) {
         throw new Error("Unauthorized - you can only delete your own blogs");
       }
 

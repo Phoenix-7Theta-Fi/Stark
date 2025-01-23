@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AppointmentForm } from "@/components/appointments/AppointmentForm";
 import { BlogFormDialog } from "@/components/practitioner/BlogFormDialog";
+import { PractitionerBlogs } from "@/components/practitioner/PractitionerBlogs";
 import { useSession } from "next-auth/react";
 import { BadgeCheck } from "lucide-react";
 
@@ -105,6 +106,14 @@ export function PractitionerPageClient({ practitioner }: PractitionerPageClientP
           </div>
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <Card>
+          <CardContent className="pt-6">
+            <PractitionerBlogs practitionerId={practitioner._id} />
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
