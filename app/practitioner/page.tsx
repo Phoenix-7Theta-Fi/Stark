@@ -6,7 +6,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { PractitionerProfile } from "@/components/practitioner/PractitionerProfile";
-import { CreateBlogDialog } from "@/components/practitioner/CreateBlogDialog";
+import { BlogFormDialog } from "@/components/practitioner/BlogFormDialog";
 
 export default function PractitionerDashboard() {
   const { data: session, status } = useSession();
@@ -42,7 +42,7 @@ export default function PractitionerDashboard() {
               Write and manage your health articles.
             </p>
             <div className="flex gap-4">
-              <CreateBlogDialog />
+              <BlogFormDialog />
               <Link href="/blog">
                 <Button variant="secondary">View All Posts</Button>
               </Link>

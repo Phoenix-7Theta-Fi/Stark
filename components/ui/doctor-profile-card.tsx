@@ -14,7 +14,7 @@ const DoctorProfileCard: React.FC<DoctorProfileCardProps> = ({ practitioner }) =
     return (
         <div className="p-4 sm:p-6 flex items-center justify-center min-h-[400px]">
             <motion.div
-                className="relative w-full max-w-lg bg-gradient-to-br from-blue-500/95 via-blue-400/95 to-cyan-400/95 p-6 sm:p-8 rounded-2xl overflow-hidden backdrop-blur-xl"
+                className="relative w-full max-w-lg bg-gradient-to-br from-amber-600/95 via-amber-500/95 to-yellow-500/95 p-6 sm:p-8 rounded-2xl overflow-hidden backdrop-blur-xl"
                 style={{
                     boxShadow: `
                     0 5px 15px -3px rgba(0, 0, 0, 0.1),
@@ -55,9 +55,9 @@ const DoctorProfileCard: React.FC<DoctorProfileCardProps> = ({ practitioner }) =
                             </h1>
                             <div className='inline-flex items-center gap-2 px-2.5 py-1.5 bg-white/60 backdrop-blur-md border border-white/20 rounded-full'>
                                 <div className='relative flex items-center justify-center'>
-                                    <div className='w-2 h-2 rounded-full bg-blue-400' />
-                                    <div className='absolute w-4 h-4 rounded-full bg-blue-400/40 animate-ping' />
-                                    <div className='absolute w-3 h-3 rounded-full bg-blue-400/30 blur-sm' />
+                                    <div className='w-2 h-2 rounded-full bg-amber-400' />
+                                    <div className='absolute w-4 h-4 rounded-full bg-amber-400/40 animate-ping' />
+                                    <div className='absolute w-3 h-3 rounded-full bg-amber-400/30 blur-sm' />
                                 </div>
                                 <span className='text-white/90 text-xs font-medium tracking-wide capitalize'>
                                     {practitioner.consultationType}
@@ -65,7 +65,7 @@ const DoctorProfileCard: React.FC<DoctorProfileCardProps> = ({ practitioner }) =
                             </div>
                         </div>
                         <div className="bg-white backdrop-blur-md rounded-xl p-2">
-                            <div className="text-blue-600 font-semibold">
+                            <div className="text-amber-600 font-semibold">
                                 {practitioner.experience}+ yrs
                             </div>
                         </div>
@@ -73,14 +73,14 @@ const DoctorProfileCard: React.FC<DoctorProfileCardProps> = ({ practitioner }) =
 
                     {/* Info */}
                     <div className="space-y-1.5 bg-white/5 backdrop-blur-sm rounded-xl p-4">
-                        <span className='text-blue-100 text-xs uppercase tracking-wider'>Qualification</span>
+                        <span className='text-amber-100 text-xs uppercase tracking-wider'>Qualification</span>
                         <p className='text-white/90 text-base'>{practitioner.qualification}</p>
                     </div>
 
                     {/* Fee Display */}
                     <div className="bg-white/10 backdrop-blur-md rounded-xl p-4">
                         <div className="text-center space-y-1.5">
-                            <span className="text-blue-100 text-xs uppercase tracking-wider">
+                            <span className="text-amber-100 text-xs uppercase tracking-wider">
                                 Consultation Fee
                             </span>
                             <p className="text-2xl sm:text-3xl font-bold text-white">
@@ -93,7 +93,7 @@ const DoctorProfileCard: React.FC<DoctorProfileCardProps> = ({ practitioner }) =
                     <div className="grid grid-cols-1 gap-3">
                         <Link href={`/user/practitioners/${practitioner.userId}`}>
                             <motion.button
-                                className='relative bg-white hover:bg-gray-50 px-4 py-3 text-sm font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-blue-600 group overflow-hidden w-full'
+                                className='relative bg-white hover:bg-gray-50 px-4 py-3 text-sm font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-amber-600 group overflow-hidden w-full'
                                 whileHover={{ scale: 1.02 }}
                                 whileTap={{ scale: 0.98 }}
                             >

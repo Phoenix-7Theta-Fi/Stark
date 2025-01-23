@@ -5,7 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { AppointmentForm } from "@/components/appointments/AppointmentForm";
-import { CreateBlogDialog } from "@/components/practitioner/CreateBlogDialog";
+import { BlogFormDialog } from "@/components/practitioner/BlogFormDialog";
 import { useSession } from "next-auth/react";
 
 interface PractitionerPageClientProps {
@@ -89,7 +89,7 @@ export function PractitionerPageClient({ practitioner }: PractitionerPageClientP
               </Dialog>
               {isPractitionerProfile && (
                 <div className="flex-1">
-                  <CreateBlogDialog />
+                  <BlogFormDialog />
                 </div>
               )}
             </div>

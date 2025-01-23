@@ -4,37 +4,86 @@ import { useEffect, useState } from "react"
 import { Blog } from "@/types/blog"
 import Link from "next/link"
 import Image from "next/image"
+import { useSession } from "next-auth/react"
+import { BlogFormDialog } from "@/components/practitioner/BlogFormDialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Button } from "@/components/ui/button"
+import { useRouter } from "next/navigation"
+import { useToast } from "@/hooks/use-toast"
 
 export default function BlogPost({ params }: { params: { id: string } }) {
   const [blog, setBlog] = useState<Blog | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [notFound, setNotFound] = useState(false)
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false)
+  const { data: session } = useSession()
+  const router = useRouter()
+  const { toast } = useToast()
+
+  const isAuthor = session?.user?.role === "practitioner" && 
+    session?.user?.id === blog?.author.practitionerId
+
+  const fetchBlog = async () => {
+    try {
+      const response = await fetch(`/api/blogs/${params.id}`)
+      if (!response.ok) {
+        if (response.status === 404) {
+          setNotFound(true)
+          return
+        }
+        throw new Error(await response.text())
+      }
+      const data = await response.json()
+      setBlog(data)
+    } catch (error) {
+      console.error("Error fetching blog:", error)
+      setError(error instanceof Error ? error.message : "Failed to load blog")
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    async function fetchBlog() {
-      try {
-        const response = await fetch(`/api/blogs/${params.id}`)
-        if (!response.ok) {
-          if (response.status === 404) {
-            setNotFound(true)
-            return
-          }
-          throw new Error(await response.text())
-        }
-        const data = await response.json()
-        console.log('Blog data:', data) // Debug log
-        setBlog(data)
-      } catch (error) {
-        console.error("Error fetching blog:", error)
-        setError(error instanceof Error ? error.message : "Failed to load blog")
-      } finally {
-        setLoading(false)
-      }
-    }
-
     fetchBlog()
   }, [params.id])
+
+  const handleDelete = async () => {
+    try {
+      const response = await fetch(`/api/blogs/${params.id}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to delete blog')
+      }
+
+      toast({
+        title: "Success",
+        description: "Blog post deleted successfully"
+      })
+
+      router.push('/blog')
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete blog",
+        variant: "destructive"
+      })
+    } finally {
+      setShowDeleteDialog(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -78,14 +127,30 @@ export default function BlogPost({ params }: { params: { id: string } }) {
     return null
   }
 
-  // Debug log for practitioner linking
-  if (blog.author.practitionerId) {
-    console.log('Author has practitionerId:', blog.author.practitionerId)
-  }
-
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
       <div className="space-y-8">
+        {/* Author Actions */}
+        {isAuthor && (
+          <div className="flex justify-end space-x-4">
+            <BlogFormDialog 
+              blog={blog}
+              onSuccess={fetchBlog}
+              trigger={
+                <Button variant="outline">
+                  Edit Blog Post
+                </Button>
+              }
+            />
+            <Button 
+              variant="destructive" 
+              onClick={() => setShowDeleteDialog(true)}
+            >
+              Delete Blog Post
+            </Button>
+          </div>
+        )}
+
         {/* Header */}
         {blog.image && (
           <div className="relative h-[400px] w-full rounded-lg overflow-hidden">
@@ -113,7 +178,6 @@ export default function BlogPost({ params }: { params: { id: string } }) {
             </div>
             <div>
               {blog.author.practitionerId ? (
-                // Using the practitionerId to link to the practitioner's profile
                 <Link 
                   href={`/user/practitioners/${blog.author.practitionerId}`}
                   className="font-semibold text-purple-600 hover:text-purple-800 transition-colors"
@@ -131,11 +195,14 @@ export default function BlogPost({ params }: { params: { id: string } }) {
         {/* Content */}
         <div className="prose prose-lg max-w-none">
           <div dangerouslySetInnerHTML={{ __html: blog.description }} />
-          {blog.createdAt && (
-            <p className="text-sm text-gray-500">
-              Published on: {new Date(blog.createdAt).toLocaleDateString()}
-            </p>
-          )}
+          <div className="text-sm text-gray-500 space-y-1">
+            {blog.createdAt && (
+              <p>Published on: {new Date(blog.createdAt).toLocaleDateString()}</p>
+            )}
+            {blog.updatedAt && blog.updatedAt !== blog.createdAt && (
+              <p>Last updated: {new Date(blog.updatedAt).toLocaleDateString()}</p>
+            )}
+          </div>
         </div>
 
         {/* Back to Blog List */}
@@ -149,6 +216,22 @@ export default function BlogPost({ params }: { params: { id: string } }) {
           </Link>
         </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure you want to delete this blog post?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The blog post will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

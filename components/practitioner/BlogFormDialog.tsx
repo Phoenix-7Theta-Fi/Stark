@@ -1,12 +1,13 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import dynamic from "next/dynamic"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { useSession } from "next-auth/react"
+import { Blog } from "@/types/blog"
 import Image from 'next/image'
 
 const ReactQuill = dynamic(
@@ -43,16 +44,32 @@ const formats = [
   "image",
 ]
 
-export function CreateBlogDialog() {
+interface BlogFormDialogProps {
+  blog?: Blog  // Optional blog for editing mode
+  trigger?: React.ReactNode  // Custom trigger button/element
+  onSuccess?: () => void  // Callback after successful submission
+}
+
+export function BlogFormDialog({ blog, trigger, onSuccess }: BlogFormDialogProps) {
   const [open, setOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [title, setTitle] = useState("")
-  const [content, setContent] = useState("")
+  const [title, setTitle] = useState(blog?.title || "")
+  const [content, setContent] = useState(blog?.description || "")
   const [selectedImage, setSelectedImage] = useState<File | null>(null)
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(blog?.backgroundImage || null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
   const { data: session } = useSession()
+
+  // Reset form when dialog opens/closes
+  useEffect(() => {
+    if (open) {
+      setTitle(blog?.title || "")
+      setContent(blog?.description || "")
+      setSelectedImage(null)
+      setPreviewUrl(blog?.backgroundImage || null)
+    }
+  }, [open, blog])
 
   const calculateReadTime = (text: string) => {
     const wordsPerMinute = 200
@@ -87,34 +104,41 @@ export function CreateBlogDialog() {
       const formData = new FormData()
       formData.append('title', title)
       formData.append('description', content)
-      formData.append('author', JSON.stringify({
-        name: session?.user?.name || "Anonymous",
-        avatar: session?.user?.image || "/default-avatar.png",
-        practitionerId: session?.user?.id
-      }))
       formData.append('readTime', calculateReadTime(content))
       
       if (selectedImage) {
         formData.append('image', selectedImage)
       }
 
-      const response = await fetch("/api/blogs/create", {
-        method: "POST",
-        body: formData,
-      })
+      if (!blog) {
+        // Creating new blog
+        formData.append('author', JSON.stringify({
+          name: session?.user?.name || "Anonymous",
+          avatar: session?.user?.image || "/default-avatar.png",
+          practitionerId: session?.user?.id
+        }))
+      }
+
+      const response = await fetch(
+        blog ? `/api/blogs/${blog._id}` : "/api/blogs/create",
+        {
+          method: blog ? "PUT" : "POST",
+          body: formData,
+        }
+      )
 
       if (!response.ok) {
         const error = await response.json()
         throw new Error(
           error.error === "Server configuration error: Missing AI API key"
             ? "System is not configured properly. Please contact admin."
-            : error.error || "Failed to create blog post"
+            : error.error || `Failed to ${blog ? 'update' : 'create'} blog post`
         )
       }
 
       toast({
         title: "Success",
-        description: "Blog post created successfully",
+        description: `Blog post ${blog ? 'updated' : 'created'} successfully`,
       })
 
       // Reset form and close dialog
@@ -123,10 +147,13 @@ export function CreateBlogDialog() {
       setSelectedImage(null)
       setPreviewUrl(null)
       setOpen(false)
+
+      // Call success callback if provided
+      onSuccess?.()
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Failed to create blog post",
+        description: error instanceof Error ? error.message : `Failed to ${blog ? 'update' : 'create'} blog post`,
         variant: "destructive",
       })
     } finally {
@@ -134,15 +161,25 @@ export function CreateBlogDialog() {
     }
   }
 
+  const defaultTrigger = (
+    <Button variant="outline">
+      {blog ? "Edit Blog Post" : "Create Blog Post"}
+    </Button>
+  )
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant="outline">Create Blog Post</Button>
+        {trigger || defaultTrigger}
       </DialogTrigger>
-      <DialogContent className="max-w-3xl" aria-describedby="blog-creation-form">
-        <div id="blog-creation-form" className="sr-only">Form to create a new blog post with title, image and content editor</div>
+      <DialogContent className="max-w-3xl" aria-describedby="blog-form">
+        <div id="blog-form" className="sr-only">
+          Form to {blog ? 'edit' : 'create'} a blog post with title, image and content editor
+        </div>
         <DialogHeader>
-          <DialogTitle>Create a New Blog Post</DialogTitle>
+          <DialogTitle>
+            {blog ? 'Edit Blog Post' : 'Create a New Blog Post'}
+          </DialogTitle>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="space-y-2">
@@ -198,7 +235,7 @@ export function CreateBlogDialog() {
               onClick={handleSubmit}
               disabled={isSubmitting}
             >
-              {isSubmitting ? "Publishing..." : "Publish"}
+              {isSubmitting ? (blog ? "Updating..." : "Publishing...") : (blog ? "Update" : "Publish")}
             </Button>
           </div>
         </div>

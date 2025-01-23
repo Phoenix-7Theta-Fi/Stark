@@ -15,7 +15,9 @@ export interface BlogDocument {
     data: string  // Base64 encoded image data
     type: string  // MIME type
   }
+  backgroundImage?: string  // Path to uploaded image
   createdAt?: Date
+  updatedAt?: Date  // Added for tracking updates
   embedding: number[]  // Vector embedding for semantic search
 }
 
@@ -34,7 +36,9 @@ export interface Blog {
     data: string
     type: string
   }
+  backgroundImage?: string  // Path to uploaded image
   createdAt?: string
+  updatedAt?: string  // Added for tracking updates
   embeddings: {
     text: string,       // The chunk of text this embedding represents
     vector: number[]    // Vector embedding for semantic search
