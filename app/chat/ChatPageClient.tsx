@@ -15,6 +15,10 @@ export function ChatPageClient() {
   const [input, setInput] = useState("");
   const { toast } = useToast();
 
+  const handleSuggestionClick = (question: string) => {
+    setInput(question);
+  };
+
   async function sendMessage(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!input.trim() || chatSession.isLoading) return;
@@ -32,12 +36,20 @@ export function ChatPageClient() {
     setInput("");
 
     try {
+      // Get all previous questions for context
+      const previousQuestions = chatSession.messages
+        .filter(msg => msg.role === "user")
+        .map(msg => msg.content);
+
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ message: userMessage.content }),
+        body: JSON.stringify({ 
+          message: userMessage.content,
+          previousQuestions 
+        }),
       });
 
       if (!response.ok) {
@@ -52,7 +64,8 @@ export function ChatPageClient() {
           { 
             role: "assistant", 
             content: data.response,
-            citations: data.citations 
+            citations: data.citations,
+            suggestions: data.suggestions
           },
         ],
         isLoading: false,
@@ -71,7 +84,11 @@ export function ChatPageClient() {
     <div className="flex h-[calc(100vh-12rem)] flex-col rounded-lg border">
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {chatSession.messages.map((message, i) => (
-          <ChatMessageComponent key={i} message={message} />
+          <ChatMessageComponent 
+            key={i} 
+            message={message} 
+            onSuggestionClick={handleSuggestionClick}
+          />
         ))}
         {chatSession.isLoading && (
           <div className="flex items-center justify-center p-4">

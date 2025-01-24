@@ -1,15 +1,31 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { NextResponse } from "next/server";
 import { Db, ObjectId } from "mongodb";
+import OpenAI from "openai";
+import { ChatOpenAI } from "@langchain/openai";
 import clientPromise from "@/lib/mongodb";
 import { generateEmbedding } from "@/lib/embeddings";
-import { Citation } from "@/types/chat";
+import { Citation, BlogCitation, WebCitation, ChatResponse } from "@/types/chat";
+import { createSearchOrchestrator } from "@/lib/search/orchestrator";
 
-const GENERATIVE_AI_API_KEY = process.env.GOOGLE_AI_API_KEY;
-const LLM_MODEL_NAME = "gemini-1.5-flash-8b";
+const GLAMA_API_KEY = process.env.GLAMA_API_KEY;
+if (!GLAMA_API_KEY) {
+  throw new Error("GLAMA_API_KEY is not configured");
+}
 
-const genAI = new GoogleGenerativeAI(GENERATIVE_AI_API_KEY || "");
-const llmModel = genAI.getGenerativeModel({ model: LLM_MODEL_NAME });
+// OpenAI instance for embeddings
+const openai = new OpenAI({
+  baseURL: 'https://glama.ai/api/gateway/openai/v1',
+  apiKey: GLAMA_API_KEY,
+});
+
+// ChatOpenAI instance for LangChain
+const llm = new ChatOpenAI({
+  modelName: "gemini-2.0-flash-exp",
+  openAIApiKey: GLAMA_API_KEY,
+  configuration: {
+    baseURL: 'https://glama.ai/api/gateway/openai/v1',
+  }
+});
 
 interface BlogResult {
   _id: string;
@@ -53,15 +69,8 @@ async function getBlogEmbeddings(db: Db, queryEmbedding: number[]): Promise<stri
       }
     ];
 
-    console.log("Running vector search with pipeline:", JSON.stringify(pipeline, null, 2));
     const results = await db.collection("blogs").aggregate<BlogResult>(pipeline).toArray();
     
-    console.log("Vector search results:", {
-      count: results.length,
-      scores: results.map((r: BlogResult) => r.score),
-      contentPreviews: results.map((r: BlogResult) => `${r.title}: ${r.description.substring(0, 100)}...`)
-    });
-
     return results.map((doc: BlogResult) => `
 Title: ${doc.title}
 ID: ${doc._id}
@@ -73,19 +82,65 @@ Full content: ${doc.description}`);
   }
 }
 
+function extractCitations(text: string, blogContent: FormattedBlogResult[]): Citation[] {
+  const citations: Citation[] = [];
+  const seen = new Set<string>();
+
+  // Get the references section
+  const [mainContent, referencesSection] = text.split('References:');
+  if (!referencesSection) {
+    return citations;
+  }
+
+  // Extract references with their numbers and URLs
+  const references = referencesSection.split('\n').filter(line => line.trim());
+  
+  references.forEach(ref => {
+    // Match [number] Title - URL format
+    const urlMatch = ref.match(/\[(\d+)\]\s+(.+?)\s*-\s*(https?:\/\/[^\s]+)/);
+    // Match [number] Title format (for blogs)
+    const blogMatch = ref.match(/\[(\d+)\]\s+(.+?)$/);
+
+    if (urlMatch) {
+      const [_, num, title, url] = urlMatch;
+      if (!seen.has(url)) {
+        seen.add(url);
+        const citation: WebCitation = {
+          title: title.trim(),
+          content: `Source: ${title.trim()}\nURL: ${url}`,
+          type: 'web',
+          url: url
+        };
+        citations.push(citation);
+      }
+    } else if (blogMatch) {
+      const [_, num, title] = blogMatch;
+      const index = parseInt(num) - 1;
+      const blogItem = blogContent[index];
+      if (blogItem?.id && !seen.has(blogItem.id)) {
+        seen.add(blogItem.id);
+        if (ObjectId.isValid(blogItem.id.trim())) {
+          const citation: BlogCitation = {
+            title: blogItem.title,
+            content: blogItem.content,
+            blogId: blogItem.id.trim(),
+            type: 'blog'
+          };
+          citations.push(citation);
+        }
+      }
+    }
+  });
+
+  return citations;
+}
+
 export async function POST(req: Request) {
   const client = await clientPromise;
   const db = client.db("tweb");
   
   try {
-    const { message } = await req.json();
-
-    if (!GENERATIVE_AI_API_KEY) {
-      return NextResponse.json(
-        { error: "GOOGLE_AI_API_KEY is not configured" },
-        { status: 500 }
-      );
-    }
+    const { message, previousQuestions = [] } = await req.json();
 
     if (!message) {
       return NextResponse.json(
@@ -96,6 +151,7 @@ export async function POST(req: Request) {
 
     console.log("Processing query:", message);
 
+    // Get blog results
     const enhancedQuery = `
 Title: Find information about ${message}
 Keywords: ${message.toLowerCase().split(/\s+/).join(', ')}
@@ -104,164 +160,62 @@ This article discusses: ${message}
 Key concepts covered: ${message.toLowerCase()}
 Full content: Tell me about ${message}`;
 
-    console.log("Enhanced query:", enhancedQuery);
     const queryEmbedding = await generateEmbedding(enhancedQuery);
-    console.log("Generated query embedding with dimensions:", queryEmbedding.length);
-
-    const allBlogs = await db.collection("blogs").find({}).toArray();
-    console.log("Blogs collection status:", {
-      totalBlogs: allBlogs.length,
-      blogsWithEmbeddings: allBlogs.filter(b => b.embedding).length,
-      blogsWithEmbeddingDetails: allBlogs.map(b => ({
-        title: b.title,
-        hasEmbedding: !!b.embedding,
-        embeddingLength: b.embedding?.length,
-        embeddingField: b.embedding ? 'present' : 'missing',
-        embeddingType: b.embedding ? typeof b.embedding : 'N/A'
-      }))
-    });
-
-    const sampleDoc = await db.collection("blogs").findOne(
-      { embedding: { $exists: true } }
-    );
-    console.log("Sample blog document with embedding:",
-      sampleDoc ? {
-        title: sampleDoc.title,
-        hasEmbedding: !!sampleDoc.embedding,
-        embeddingLength: sampleDoc.embedding?.length,
-        embeddingSample: sampleDoc.embedding?.slice(0, 5)
-      } : "No blogs found with embeddings"
-    );
-
     const relevantBlogs = await getBlogEmbeddings(db, queryEmbedding);
-    console.log(`Found ${relevantBlogs.length} relevant blog sections`);
 
     const relevantContent: FormattedBlogResult[] = relevantBlogs.map((content: string) => {
       const titleMatch = content.match(/Title: (.*?)(?:\n|$)/);
       const idMatch = content.match(/ID: (.*?)(?:\n|$)/);
       const contentMatch = content.match(/Full content: (.*?)(?:\n|$)/);
 
-      // Clean up the ID by removing any whitespace
-      const id = idMatch ? idMatch[1].trim() : '';
-
-      // Log the extracted ID for debugging
-      console.log("Extracted blog ID:", { 
-        title: titleMatch ? titleMatch[1] : '',
-        rawId: idMatch ? idMatch[1] : '',
-        cleanId: id
-      });
-
       return {
-        id,
+        id: idMatch ? idMatch[1].trim() : '',
         title: titleMatch ? titleMatch[1].trim() : '',
         content: contentMatch ? contentMatch[1].trim() : content.trim()
       };
     });
 
-    const context = relevantContent.length > 0
-      ? relevantContent.map((item: FormattedBlogResult) => `Source: ${item.title}\n${item.content}`).join('\n\n---\n\n')
-      : "No relevant blog posts found.";
+    // Create search orchestrator
+    const searchOrchestrator = await createSearchOrchestrator(llm);
+    const { answer, suggestions } = await searchOrchestrator(
+      message,
+      relevantContent.map(item => item.content),
+      previousQuestions
+    );
 
-    const prompt = `You are an experienced Ayurvedic expert assistant. Your task is to provide accurate and helpful information based on our blog content.
+    // Extract citations and references
+    const citations = extractCitations(answer, relevantContent);
 
-${relevantContent.length > 0
-  ? `I found relevant information in our Ayurvedic blog posts that can help answer this question about "${message}".
+    // Split content and references, preserving the references formatting
+    const [mainContent, referencesSection] = answer.split('References:');
 
-Available sources (ordered by relevance, most relevant first):
-${relevantContent.map((item, i) => `[${i + 1}] ${item.title}`).join('\n')}
+    const response: ChatResponse = {
+      response: mainContent.trim(),
+      citations: citations,
+      references: referencesSection ? 'References:' + referencesSection : null,
+      suggestions: suggestions
+    };
 
-Detailed content:
-${context}
+    return NextResponse.json(response);
 
-Based on these blog posts, please provide a clear and thorough answer. When referencing information from a source, include its number in square brackets [1] immediately after the information. Focus on information from source [1] as it's most relevant.
-
-Your response MUST have two parts separated by '---':
-1. Your answer with inline citations [1]
-2. A References section listing all cited sources
-
-Example format:
-[Your detailed answer with citations like this [1]]
-
----
-References:
-[1] Exact Blog Title As Listed Above
-`
-  :
-  `I've searched our blog posts but couldn't find specific information about "${message}". Please let the user know we don't currently have content covering this topic in our blog posts.`}
-
-Question: ${message}
-
-Provide a detailed answer:
-`;
-
-    const result = await llmModel.generateContent(prompt);
-    const response = await result.response;
-    const text = response.text();
-
-    // Parse the response to separate content and references
-    const parts = text.split('\n---\n');
-    const content = parts[0];
-    const referencesSection = parts[1]?.includes('References:') ? parts[1] : null;
-    
-    // Parse references from the content
-    const references = referencesSection
-      ?.split('\n')
-      .filter(line => line.trim())
-      .map(line => {
-        const match = line.match(/^\[(\d+)\]\s+(.+)$/);
-        return match ? { index: parseInt(match[1]), title: match[2].trim() } : null;
-      })
-      .filter((ref): ref is { index: number; title: string } => ref !== null) ?? [];
-
-    // Build citations array from references
-    const citations = references.reduce<Citation[]>((acc, ref) => {
-      // Find the matching blog content
-      const source = relevantContent.find(item =>
-        // Do a case-insensitive title comparison to ensure matches
-        item.title.toLowerCase() === ref.title.toLowerCase()
-      );
-      
-      if (source?.id) {
-        const cleanId = source.id.trim();
-        if (ObjectId.isValid(cleanId)) {
-          acc.push({
-            title: ref.title, // Use the exact title from the reference
-            content: source.content,
-            blogId: cleanId
-          });
-        }
-      }
-      return acc;
-    }, []);
-
-    console.log("Built citations:", citations);
-
-    // Log citations for debugging
-    console.log("Generated citations:", citations.map(c => ({
-      title: c.title,
-      blogId: c.blogId
-    })));
-
-    return NextResponse.json({
-      response: content.trim(),
-      citations: citations.length > 0 ? citations : undefined
-    });
   } catch (error) {
     console.error("Chat API error:", error);
     
     let errorMessage = "Failed to generate response";
+    let statusCode = 500;
+
     if (error instanceof Error) {
       if (error.message.includes("embedContent")) {
         errorMessage = "Error generating embeddings for the query";
-      } else if (error.message.includes("generateContent")) {
-        errorMessage = "Error generating AI response";
+      } else if (error.message.includes("AI Response Generation Failed")) {
+        errorMessage = error.message;
       }
       console.error("Error details:", error.message);
     }
 
     return NextResponse.json(
       { error: errorMessage },
-      { status: 500 }
+      { status: statusCode }
     );
   }
 }
